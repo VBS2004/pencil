@@ -1,0 +1,22 @@
+# model weights, vendored runtime, outputs, third-party reference code (fetch per tts/README.md)
+tts/models/
+tts/vendor/
+tts/out/
+tts/web_ref/
+
+# eval runs, screenshots, recordings
+eval_*/
+eval_*.json
+eval_*.log
+cmp_*/
+cmp_*.json
+fixed_check/
+shots*/
+shot_*.png
+videos/
+
+__pycache__/
+*.pyc
+*.log
+.env
+lesson.json

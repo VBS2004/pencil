@@ -1,0 +1,1316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pencil player</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --ink:#1f2430; --paper:#fbf7ef; --accent:#5146d9; --line:#e6dfd0; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font:17px/1.55 "Nunito", "Segoe UI", system-ui, sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:#fffdf8ee; backdrop-filter:blur(6px); border-bottom:1px solid var(--line); padding:10px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  header h1 { font-size:18px; margin:0 12px 0 0; }
+  button, select, label.btn { font:inherit; font-size:15px; border:1px solid var(--line); background:#fff; border-radius:10px; padding:6px 12px; cursor:pointer; color:var(--ink); }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; min-width:84px; }
+  button:disabled { opacity:.4; cursor:default; }
+  #status { font-size:14px; opacity:.7; margin-left:auto; }
+  #dots { display:flex; gap:6px; width:100%; }
+  #dots button { flex:1; height:8px; padding:0; border-radius:4px; background:var(--line); border:0; }
+  #dots button.on { background:var(--accent); }
+  #loader { max-width:1000px; margin:10px auto 0; padding:0 16px; font-size:14px; }
+  #loader summary { cursor:pointer; opacity:.75; }
+  #paste { width:100%; height:120px; font:13px/1.4 ui-monospace, Menlo, monospace; margin:8px 0; }
+  #issues { max-width:1000px; margin:10px auto; padding:10px 16px; background:#fff3f0; border:1px solid #f0c4b8; border-radius:10px; font-size:14px; }
+  #issues ul { margin:6px 0 0; padding-left:20px; }
+  #issues[hidden] { display:none; }
+  #stage { margin:0 auto; padding:20px 16px 120px; }
+  .beat { display:none; margin-bottom:34px; }
+  .beat.visible { display:block; }
+  .caption { font-size:14px; font-style:italic; opacity:.6; margin:0 0 10px; border-left:3px solid var(--line); padding-left:10px; }
+  .reveal { opacity:0; transform:translateY(8px); transition:opacity .5s, transform .5s; }
+  .reveal.in { opacity:1; transform:none; }
+  .instant, .instant * { transition:none !important; }
+  .heading { font-family:"Baloo 2", "Segoe Print", "Comic Sans MS", cursive; margin:.3em 0; }
+  h1.heading { font-size:40px; } h2.heading { font-size:30px; } h3.heading { font-size:24px; }
+  .paragraph { margin:.6em 0; font-size:19px; }
+  .callout { margin:14px 0; padding:12px 16px; border-radius:12px; background:#eef0ff; border-left:5px solid var(--accent); font-weight:600; }
+  .callout.tone-tip { background:#e9f7ee; border-color:#2e9b5a; }
+  .callout.tone-warn { background:#fff1e0; border-color:#e08a1e; }
+  .callout.tone-key { background:#eef0ff; border-color:var(--accent); }
+  .definition { margin:14px 0; padding:12px 16px; background:#fff; border:2px dashed #b9b2f5; border-radius:12px; }
+  .definition b { color:var(--accent); margin-right:8px; }
+  table.tbl { border-collapse:collapse; width:100%; margin:14px 0; background:#fff; border-radius:10px; overflow:hidden; }
+  table.tbl th, table.tbl td { border:1px solid var(--line); padding:8px 12px; text-align:left; }
+  table.tbl th { background:#f3efe4; }
+  .figure { margin:14px 0; background:#fff; border:1px solid var(--line); border-radius:14px; padding:10px; }
+  .figure svg { width:100%; height:auto; display:block; }
+  #stage.wobble .figure svg { filter:url(#wobble); } /* opt-in: displacement can notch thin strokes */
+  .figure .stroke { stroke-dasharray:1; stroke-dashoffset:1; transition:stroke-dashoffset .9s ease; }
+  .drawn .stroke { stroke-dashoffset:0; }
+  .figure .filled { fill-opacity:0; transition:fill-opacity .6s .5s; }
+  .drawn .filled { fill-opacity:1; }
+  .figure .fade { opacity:0; transition:opacity .6s; }
+  .drawn .fade { opacity:1; }
+  .figure .label { opacity:0; transition:opacity .5s .3s; font-family:"Patrick Hand", "Segoe Print", "Comic Sans MS", cursive; }
+  .drawn .label { opacity:1; }
+  .quiz { border-top:2px dashed var(--line); padding-top:20px; }
+  .q { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:14px 0; }
+  .q p { margin:0 0 8px; font-weight:700; }
+  .q button { display:block; width:100%; text-align:left; margin:6px 0; }
+  .q button.right { background:#e0f5e8; border-color:#2e9b5a; }
+  .q button.wrong { background:#fde5e1; border-color:#d33a3a; }
+  .q .why { margin-top:8px; font-size:15px; opacity:.85; }
+  #empty { text-align:center; opacity:.6; padding:60px 0; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <filter id="wobble" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves="1" seed="3" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="5"/>
+    </filter>
+  </defs>
+</svg>
+
+<header>
+  <h1 id="title">Pencil player</h1>
+  <button id="prev" title="Previous beat" disabled>&#9664;</button>
+  <button id="play" class="primary" disabled>Play</button>
+  <button id="next" title="Next beat" disabled>&#9654;</button>
+  <select id="speed" title="Narration speed" aria-label="Narration speed">
+    <option value="0.75">0.75&times;</option>
+    <option value="1" selected>1&times;</option>
+    <option value="1.25">1.25&times;</option>
+    <option value="1.5">1.5&times;</option>
+    <option value="3">3&times;</option>
+  </select>
+  <label class="btn"><input type="checkbox" id="mute"> Silent</label>
+  <label class="btn" title="Hand-drawn wobble (can slightly notch thin lines)"><input type="checkbox" id="wobble-toggle"> Wobble</label>
+  <span id="status">No lesson loaded</span>
+  <div id="dots"></div>
+</header>
+
+<details id="loader">
+  <summary>Load a lesson</summary>
+  <p>
+    <button id="sample-btn">Load sample</button>
+    <label class="btn">Open JSON file <input type="file" id="file" accept="application/json,.json" hidden></label>
+  </p>
+  <textarea id="paste" placeholder="...or paste lesson JSON here" spellcheck="false"></textarea>
+  <button id="paste-btn">Load pasted JSON</button>
+</details>
+
+<div id="issues" hidden></div>
+<main id="stage"><div id="empty">Load a lesson to begin.</div></main>
+
+<script type="application/json" id="sample">{
+  "version": 1,
+  "meta": {
+    "title": "How a Rainbow Forms",
+    "subject": "Physics",
+    "language": "en",
+    "mood": "curious"
+  },
+  "canvas": {
+    "logicalWidth": 1000,
+    "theme": "light"
+  },
+  "beats": [
+    {
+      "id": "b1",
+      "narration": "Sunlight looks white, but a raindrop can split it into every colour you can see.",
+      "ops": [
+        {
+          "id": "h1",
+          "type": "heading",
+          "text": "How a rainbow forms",
+          "level": 1
+        },
+        {
+          "id": "fig1",
+          "type": "figure",
+          "frame": {
+            "width": 820,
+            "height": 300
+          },
+          "parts": [
+            {
+              "name": "sun",
+              "cue": 0,
+              "marks": [
+                {
+                  "kind": "circle",
+                  "cx": 120,
+                  "cy": 120,
+                  "r": 50,
+                  "color": "orange",
+                  "fill": "#fff3c4"
+                },
+                {
+                  "kind": "path",
+                  "d": "M120 40 L120 20 M120 200 L120 220 M40 120 L20 120 M200 120 L220 120",
+                  "color": "orange",
+                  "width": 3
+                },
+                {
+                  "kind": "label",
+                  "x": 120,
+                  "y": 270,
+                  "text": "Sun",
+                  "size": 24,
+                  "align": "middle"
+                }
+              ]
+            },
+            {
+              "name": "light",
+              "cue": 2,
+              "marks": [
+                {
+                  "kind": "path",
+                  "d": "M190 120 L520 120 M505 108 L520 120 L505 132",
+                  "color": "ink",
+                  "width": 3
+                },
+                {
+                  "kind": "label",
+                  "x": 355,
+                  "y": 95,
+                  "text": "white light",
+                  "size": 20,
+                  "align": "middle"
+                }
+              ]
+            },
+            {
+              "name": "drop",
+              "cue": 5,
+              "marks": [
+                {
+                  "kind": "path",
+                  "d": "M650 50 C590 130 590 200 650 200 C710 200 710 130 650 50 Z",
+                  "color": "blue",
+                  "fill": "#e8eefe"
+                },
+                {
+                  "kind": "label",
+                  "x": 650,
+                  "y": 270,
+                  "text": "Raindrop",
+                  "size": 24,
+                  "align": "middle"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b2",
+      "narration": "Light enters the drop and slows down, which bends it. Red bends the least, violet bends the most.",
+      "ops": [
+        {
+          "id": "fig2",
+          "type": "figure",
+          "frame": {
+            "width": 820,
+            "height": 340
+          },
+          "parts": [
+            {
+              "name": "incoming",
+              "cue": 1,
+              "marks": [
+                {
+                  "kind": "path",
+                  "d": "M20 140 L240 150",
+                  "color": "ink",
+                  "width": 3
+                },
+                {
+                  "kind": "label",
+                  "x": 20,
+                  "y": 110,
+                  "text": "white light",
+                  "size": 20,
+                  "align": "start"
+                }
+              ]
+            },
+            {
+              "name": "drop",
+              "cue": 3,
+              "marks": [
+                {
+                  "kind": "circle",
+                  "cx": 330,
+                  "cy": 170,
+                  "r": 100,
+                  "color": "blue",
+                  "fill": "#e8eefe"
+                }
+              ]
+            },
+            {
+              "name": "red_ray",
+              "cue": 10,
+              "marks": [
+                {
+                  "kind": "path",
+                  "d": "M400 210 L790 260",
+                  "color": "red",
+                  "width": 4
+                },
+                {
+                  "kind": "label",
+                  "x": 640,
+                  "y": 215,
+                  "text": "Red bends least",
+                  "size": 20,
+                  "align": "middle"
+                }
+              ]
+            },
+            {
+              "name": "violet_ray",
+              "cue": 14,
+              "marks": [
+                {
+                  "kind": "path",
+                  "d": "M400 215 L790 320",
+                  "color": "purple",
+                  "width": 4
+                },
+                {
+                  "kind": "label",
+                  "x": 560,
+                  "y": 335,
+                  "text": "Violet bends most",
+                  "size": 20,
+                  "align": "middle"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b3",
+      "narration": "This bending by colour is called dispersion. Different colours leave at slightly different angles.",
+      "ops": [
+        {
+          "id": "d1",
+          "type": "definition",
+          "term": "Dispersion",
+          "definition": "Light of different colours bending by different amounts as it passes through a material."
+        },
+        {
+          "id": "c1",
+          "type": "callout",
+          "tone": "key",
+          "text": "One white beam in, a whole spectrum out."
+        }
+      ]
+    },
+    {
+      "id": "b4",
+      "narration": "Red leaves at about forty two degrees and violet at about forty, so red ends up on the outside of the bow.",
+      "ops": [
+        {
+          "id": "t1",
+          "type": "table",
+          "columns": [
+            "Colour",
+            "Angle from the sun's opposite direction"
+          ],
+          "rows": [
+            [
+              "Red",
+              "about 42 degrees"
+            ],
+            [
+              "Green",
+              "about 41 degrees"
+            ],
+            [
+              "Violet",
+              "about 40 degrees"
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "question": "Which colour bends the least inside a raindrop?",
+      "options": [
+        "Violet",
+        "Red",
+        "Green"
+      ],
+      "answer": 1,
+      "explanation": "Red slows down and bends the least, so it leaves at the largest angle and sits on the outside of the rainbow."
+    },
+    {
+      "question": "What is the splitting of white light into colours called?",
+      "options": [
+        "Dispersion",
+        "Reflection",
+        "Absorption"
+      ],
+      "answer": 0,
+      "explanation": "Dispersion is the colour-dependent bending of light."
+    }
+  ]
+}</script>
+<script>
+/*
+ * Lesson validator: dependency-free, runs in Node and in the browser.
+ *
+ *   node validator.js lesson.json        -> prints {"ok":bool,"issues":[...]} and exits 0/1
+ *   const { validateLesson } = require('./validator.js')
+ *
+ * Each issue: { path, code, message }. The planner feeds these back to the model.
+ */
+(function (root) {
+  'use strict';
+
+  const PALETTE = ['ink', 'blue', 'red', 'green', 'orange', 'purple', 'gray'];
+  const OP_TYPES = ['heading', 'paragraph', 'callout', 'definition', 'table', 'figure'];
+  const MARK_KINDS = ['ellipse', 'circle', 'rect', 'line', 'arrow', 'path', 'label'];
+  const TONES = ['info', 'tip', 'warn', 'key'];
+  const ALIGNS = ['start', 'middle', 'end'];
+  const LABEL_CHAR_W = 0.55; // average glyph width as a fraction of font size
+
+  const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+  const isStr = (v) => typeof v === 'string' && v.trim().length > 0;
+  const wordCount = (s) => (typeof s === 'string' ? s.trim().split(/\s+/).filter(Boolean).length : 0);
+
+  /** Parse an absolute-command SVG path into points. Returns {points} or {error}. */
+  function pathPoints(d) {
+    if (typeof d !== 'string' || !d.trim()) return { error: 'empty path' };
+    const tokens = d.match(/[A-Za-z]|-?\d*\.?\d+(?:e[-+]?\d+)?/g);
+    if (!tokens) return { error: 'unparseable path' };
+    const argc = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, Z: 0 };
+    const points = [];
+    let i = 0, cmd = null, cx = 0, cy = 0;
+    while (i < tokens.length) {
+      if (/[A-Za-z]/.test(tokens[i])) {
+        cmd = tokens[i++];
+        if (cmd !== cmd.toUpperCase()) return { error: `relative command "${cmd}" is not allowed, use absolute (uppercase)` };
+        if (!(cmd in argc)) return { error: `unsupported path command "${cmd}"` };
+        if (cmd === 'Z') continue;
+      } else if (cmd === null || cmd === 'Z') {
+        return { error: 'path data before a command' };
+      }
+      const n = argc[cmd];
+      const args = tokens.slice(i, i + n).map(Number);
+      if (args.length < n || args.some((a) => !Number.isFinite(a))) return { error: `command "${cmd}" has too few numbers` };
+      i += n;
+      if (cmd === 'H') { cx = args[0]; points.push([cx, cy]); }
+      else if (cmd === 'V') { cy = args[0]; points.push([cx, cy]); }
+      else {
+        for (let k = 0; k < n; k += 2) points.push([args[k], args[k + 1]]);
+        cx = args[n - 2]; cy = args[n - 1];
+      }
+      if (cmd === 'M') cmd = 'L'; // implicit lineto after moveto
+    }
+    return { points };
+  }
+
+  /** Bounding box of one mark: [x0,y0,x1,y1] or null if it cannot be computed. */
+  function markBox(m, issues, path) {
+    switch (m.kind) {
+      case 'ellipse': return [m.cx - m.rx, m.cy - m.ry, m.cx + m.rx, m.cy + m.ry];
+      case 'circle': return [m.cx - m.r, m.cy - m.r, m.cx + m.r, m.cy + m.r];
+      case 'rect': return [m.x, m.y, m.x + m.w, m.y + m.h];
+      case 'line': case 'arrow': return [Math.min(m.x1, m.x2), Math.min(m.y1, m.y2), Math.max(m.x1, m.x2), Math.max(m.y1, m.y2)];
+      case 'path': {
+        const r = pathPoints(m.d);
+        if (r.error) { issues.push({ path, code: 'bad_path', message: r.error }); return null; }
+        const xs = r.points.map((p) => p[0]), ys = r.points.map((p) => p[1]);
+        return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+      }
+      case 'label': {
+        const size = isNum(m.size) ? m.size : 20;
+        const w = String(m.text).length * size * LABEL_CHAR_W;
+        const x0 = m.align === 'middle' ? m.x - w / 2 : m.align === 'end' ? m.x - w : m.x;
+        return [x0, m.y - size, x0 + w, m.y + size * 0.25];
+      }
+      default: return null;
+    }
+  }
+
+  const overlap = (a, b) => {
+    const w = Math.min(a[2], b[2]) - Math.max(a[0], b[0]);
+    const h = Math.min(a[3], b[3]) - Math.max(a[1], b[1]);
+    return w > 2 && h > 2;
+  };
+
+  /** Flatten an absolute path into polylines (curves sampled) for geometric checks. */
+  function pathPolylines(d) {
+    const r = pathPoints(d);
+    if (r.error) return [];
+    const tokens = d.match(/[A-Za-z]|-?\d*\.?\d+(?:e[-+]?\d+)?/g);
+    const argc = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, Z: 0 };
+    const lines = [];
+    let cur = [], i = 0, cmd = null, x = 0, y = 0, sx = 0, sy = 0;
+    const flush = () => { if (cur.length > 1) lines.push(cur); cur = []; };
+    while (i < tokens.length) {
+      if (/[A-Za-z]/.test(tokens[i])) {
+        cmd = tokens[i++];
+        if (cmd === 'Z') { cur.push([sx, sy]); x = sx; y = sy; flush(); continue; }
+      }
+      const n = argc[cmd];
+      const a = tokens.slice(i, i + n).map(Number);
+      i += n;
+      if (cmd === 'M') { flush(); x = a[0]; y = a[1]; sx = x; sy = y; cur = [[x, y]]; cmd = 'L'; continue; }
+      if (cmd === 'L' || cmd === 'T') { cur.push([a[0], a[1]]); x = a[0]; y = a[1]; }
+      else if (cmd === 'H') { x = a[0]; cur.push([x, y]); }
+      else if (cmd === 'V') { y = a[0]; cur.push([x, y]); }
+      else if (cmd === 'C' || cmd === 'S' || cmd === 'Q') {
+        const pts = cmd === 'C' ? [[x, y], [a[0], a[1]], [a[2], a[3]], [a[4], a[5]]]
+          : cmd === 'S' ? [[x, y], [x, y], [a[0], a[1]], [a[2], a[3]]]
+          : [[x, y], [a[0], a[1]], [a[2], a[3]]];
+        for (let t = 1; t <= 10; t++) cur.push(bezier(pts, t / 10));
+        x = pts[pts.length - 1][0]; y = pts[pts.length - 1][1];
+      }
+    }
+    flush();
+    return lines;
+  }
+
+  function bezier(pts, t) {
+    let p = pts;
+    while (p.length > 1) p = p.slice(1).map((q, k) => [p[k][0] + (q[0] - p[k][0]) * t, p[k][1] + (q[1] - p[k][1]) * t]);
+    return p[0];
+  }
+
+  /** Strokes of a non-label mark as a list of polylines. */
+  function markStrokes(m) {
+    switch (m.kind) {
+      case 'line': case 'arrow': return [[[m.x1, m.y1], [m.x2, m.y2]]];
+      case 'rect': return [[[m.x, m.y], [m.x + m.w, m.y], [m.x + m.w, m.y + m.h], [m.x, m.y + m.h], [m.x, m.y]]];
+      case 'circle': case 'ellipse': {
+        const rx = m.kind === 'circle' ? m.r : m.rx, ry = m.kind === 'circle' ? m.r : m.ry, pts = [];
+        for (let k = 0; k <= 24; k++) pts.push([m.cx + rx * Math.cos((k / 24) * 2 * Math.PI), m.cy + ry * Math.sin((k / 24) * 2 * Math.PI)]);
+        return [pts];
+      }
+      case 'path': return pathPolylines(m.d);
+      default: return [];
+    }
+  }
+
+  /** Does segment (a->b) pass through box [x0,y0,x1,y1]? (Liang-Barsky) */
+  function segmentHitsBox(a, b, box) {
+    let t0 = 0, t1 = 1;
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    for (const [p, q] of [[-dx, a[0] - box[0]], [dx, box[2] - a[0]], [-dy, a[1] - box[1]], [dy, box[3] - a[1]]]) {
+      if (p === 0) { if (q < 0) return false; }
+      else {
+        const r = q / p;
+        if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; }
+        else { if (r < t0) return false; if (r < t1) t1 = r; }
+      }
+    }
+    return true;
+  }
+
+  const distToBox = (pt, box) =>
+    Math.hypot(Math.max(box[0] - pt[0], 0, pt[0] - box[2]), Math.max(box[1] - pt[1], 0, pt[1] - box[3]));
+
+  function distToSegment(p, a, b) {
+    const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0;
+    return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+  }
+
+  /** Distance from a point to a mark: 0 inside a closed shape, else to its outline/stroke. */
+  function distPointToMark(p, s) {
+    const m = s.m;
+    if (m.kind === 'circle' || m.kind === 'ellipse') {
+      const rx = m.kind === 'circle' ? m.r : m.rx, ry = m.kind === 'circle' ? m.r : m.ry;
+      const n = Math.hypot((p[0] - m.cx) / rx, (p[1] - m.cy) / ry);
+      return n <= 1 ? 0 : (n - 1) * Math.min(rx, ry);
+    }
+    if (m.kind === 'rect') return distToBox(p, [m.x, m.y, m.x + m.w, m.y + m.h]);
+    let best = Infinity;
+    for (const pl of s.lines) for (let k = 1; k < pl.length; k++) best = Math.min(best, distToSegment(p, pl[k - 1], pl[k]));
+    return best;
+  }
+
+  /** Distance from a label box to a mark (0 if they touch or the label sits inside a shape). */
+  function distBoxToMark(box, s) {
+    const m = s.m;
+    if (m.kind === 'circle' || m.kind === 'ellipse' || m.kind === 'rect') {
+      const b = markBox(m, [], '');
+      return Math.hypot(Math.max(b[0] - box[2], 0, box[0] - b[2]), Math.max(b[1] - box[3], 0, box[1] - b[3]));
+    }
+    let best = Infinity;
+    for (const pl of s.lines) for (let k = 1; k < pl.length; k++) {
+      const a = pl[k - 1], b = pl[k], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 8));
+      for (let i = 0; i <= n; i++) best = Math.min(best, distToBox([a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n], box));
+    }
+    return best;
+  }
+
+  const ATTACH_TOL = 18;   // an arrow/leader end this close to an object or label counts as touching it
+  const ORPHAN_DIST = 70;  // a label farther than this from every drawn mark names nothing
+
+  /** A label's ink box, shrunk a little so a stroke has to genuinely cross the text. */
+  const inkBox = (b) => [b[0] + 2, b[1] + 4, b[2] - 2, b[3] - 1];
+
+  const REQUIRED = {
+    ellipse: ['cx', 'cy', 'rx', 'ry'], circle: ['cx', 'cy', 'r'], rect: ['x', 'y', 'w', 'h'],
+    line: ['x1', 'y1', 'x2', 'y2'], arrow: ['x1', 'y1', 'x2', 'y2'], path: ['d'], label: ['x', 'y', 'text'],
+  };
+
+  function checkMark(m, p, frame, issues) {
+    if (!m || typeof m !== 'object' || !MARK_KINDS.includes(m.kind)) {
+      issues.push({ path: p, code: 'bad_mark', message: `kind must be one of ${MARK_KINDS.join(', ')}` });
+      return null;
+    }
+    for (const f of REQUIRED[m.kind]) {
+      const ok = m.kind === 'path' ? isStr(m.d) : m.kind === 'label' && f === 'text' ? isStr(m.text) : isNum(m[f]);
+      if (!ok) issues.push({ path: `${p}.${f}`, code: 'missing_field', message: `${m.kind} needs "${f}"` });
+    }
+    if (m.color !== undefined && !PALETTE.includes(m.color))
+      issues.push({ path: `${p}.color`, code: 'bad_color', message: `color must be one of ${PALETTE.join(', ')}` });
+    if (m.fill !== undefined && !/^#[0-9a-fA-F]{6}$/.test(m.fill))
+      issues.push({ path: `${p}.fill`, code: 'bad_fill', message: 'fill must be a #rrggbb hex color' });
+    if (m.kind === 'label' && m.align !== undefined && !ALIGNS.includes(m.align))
+      issues.push({ path: `${p}.align`, code: 'bad_align', message: `align must be one of ${ALIGNS.join(', ')}` });
+    if (issues.some((i) => i.path.startsWith(p))) return null;
+    const box = markBox(m, issues, p);
+    if (box && frame) {
+      const tol = 4;
+      if (box[0] < -tol || box[1] < -tol || box[2] > frame.width + tol || box[3] > frame.height + tol)
+        issues.push({
+          path: p, code: 'out_of_frame',
+          message: `${m.kind} spans x ${Math.round(box[0])}..${Math.round(box[2])}, y ${Math.round(box[1])}..${Math.round(box[3])} but frame is ${frame.width}x${frame.height}`,
+        });
+    }
+    return box;
+  }
+
+  function checkFigure(op, p, narrationWords, issues) {
+    const f = op.frame;
+    if (!f || !isNum(f.width) || !isNum(f.height) || f.width < 100 || f.height < 60 || f.width > 1000 || f.height > 700)
+      issues.push({ path: `${p}.frame`, code: 'bad_frame', message: 'frame needs width 100..1000 and height 60..700' });
+    const frame = f && isNum(f.width) && isNum(f.height) ? f : null;
+    if (!Array.isArray(op.parts) || op.parts.length === 0) {
+      issues.push({ path: `${p}.parts`, code: 'no_parts', message: 'figure needs at least one part' });
+      return;
+    }
+    const names = new Set();
+    const labels = []; // {box, where}
+    const strokes = []; // {m, where, lines}
+    op.parts.forEach((part, pi) => {
+      const pp = `${p}.parts[${pi}]`;
+      if (!isStr(part.name)) issues.push({ path: `${pp}.name`, code: 'missing_field', message: 'part needs a name' });
+      else if (names.has(part.name)) issues.push({ path: `${pp}.name`, code: 'duplicate_name', message: `duplicate part name "${part.name}"` });
+      else names.add(part.name);
+      if (!Number.isInteger(part.cue) || part.cue < 0)
+        issues.push({ path: `${pp}.cue`, code: 'bad_cue', message: 'cue must be a non-negative integer word index' });
+      else if (part.cue >= narrationWords)
+        issues.push({ path: `${pp}.cue`, code: 'cue_out_of_range', message: `cue ${part.cue} but the beat narration has only ${narrationWords} words (valid 0..${narrationWords - 1})` });
+      if (!Array.isArray(part.marks) || part.marks.length === 0) {
+        issues.push({ path: `${pp}.marks`, code: 'no_marks', message: 'part needs at least one mark' });
+        return;
+      }
+      part.marks.forEach((m, mi) => {
+        const box = checkMark(m, `${pp}.marks[${mi}]`, frame, issues);
+        if (box && m.kind === 'label') labels.push({ box, where: `${pp}.marks[${mi}]`, text: m.text, part: pi });
+        else if (box && m.kind !== 'label') strokes.push({ m, where: `${pp}.marks[${mi}]`, lines: markStrokes(m), part: pi });
+      });
+    });
+    const attached = (pt, self) =>
+      strokes.some((s) => s !== self && distPointToMark(pt, s) <= ATTACH_TOL) ||
+      labels.some((lb) => distToBox(pt, lb.box) <= ATTACH_TOL);
+    for (const s of strokes) {
+      const m = s.m;
+      if (m.kind !== 'line' && m.kind !== 'arrow') continue;
+      const ends = [[m.x1, m.y1], [m.x2, m.y2]];
+      const ok = ends.map((e) => attached(e, s));
+      const len = Math.hypot(m.x2 - m.x1, m.y2 - m.y1);
+      // An arrow relates two things, so both ends must touch something. A plain line is free to stand alone
+      // (axis, ground, divider), but one end attached and the other hanging in space is a broken leader line.
+      const bad = m.kind === 'arrow' ? [0, 1].filter((i) => !ok[i]) : len >= 40 && ok[0] !== ok[1] ? [ok[0] ? 1 : 0] : [];
+      for (const i of bad)
+        issues.push({
+          path: s.where, code: 'dangling_line',
+          message: `${m.kind} ${i === 0 ? 'start' : 'end'} at (${Math.round(ends[i][0])},${Math.round(ends[i][1])}) touches no object or label; move that end onto the thing it points ${i === 0 ? 'from' : 'to'} (within ${ATTACH_TOL}px)`,
+        });
+    }
+    // A label names something in its own part; if that part draws anything else, the label must sit near it.
+    // (A part that is only a label is checked against the whole figure instead.)
+    for (const lb of labels) {
+        const own = strokes.filter((s) => s.part === lb.part);
+        const pool = own.length ? own : strokes;
+        if (!pool.length) continue;
+        const d = Math.min(...pool.map((s) => distBoxToMark(lb.box, s)));
+        if (d > ORPHAN_DIST)
+          issues.push({ path: lb.where, code: 'orphan_label', message: `label "${lb.text}" is ${Math.round(d)}px from the nearest drawing; place it within ~40px of the thing it names` });
+      }
+    // A stroke crossing label text is a misplaced label or arrow. Leader lines that start at the label are fine.
+    for (const lb of labels) {
+      const ink = inkBox(lb.box);
+      for (const s of strokes) {
+        if (s.m.kind === 'line' && (distToBox([s.m.x1, s.m.y1], lb.box) <= 12 || distToBox([s.m.x2, s.m.y2], lb.box) <= 12)) continue;
+        const hit = s.lines.some((pl) => pl.some((pt, k) => k > 0 && segmentHitsBox(pl[k - 1], pt, ink)));
+        if (hit) issues.push({ path: lb.where, code: 'label_on_mark', message: `label "${lb.text}" is crossed by ${s.m.kind} ${s.where.split('.').slice(-2).join('.')}; move the label to empty space (at least 20px from lines and outlines)` });
+      }
+    }
+    for (let a = 0; a < labels.length; a++)
+      for (let b = a + 1; b < labels.length; b++)
+        if (overlap(labels[a].box, labels[b].box))
+          issues.push({ path: labels[b].where, code: 'label_overlap', message: `label "${labels[b].text}" overlaps label "${labels[a].text}"` });
+  }
+
+  function checkOp(op, p, narrationWords, ids, issues) {
+    if (!op || typeof op !== 'object' || !OP_TYPES.includes(op.type)) {
+      issues.push({ path: p, code: 'bad_op', message: `type must be one of ${OP_TYPES.join(', ')}` });
+      return;
+    }
+    if (!isStr(op.id)) issues.push({ path: `${p}.id`, code: 'missing_field', message: 'op needs an id' });
+    else if (ids.has(op.id)) issues.push({ path: `${p}.id`, code: 'duplicate_id', message: `duplicate id "${op.id}"` });
+    else ids.add(op.id);
+    const need = (k) => { if (!isStr(op[k])) issues.push({ path: `${p}.${k}`, code: 'missing_field', message: `${op.type} needs "${k}"` }); };
+    switch (op.type) {
+      case 'heading': need('text'); if (![1, 2, 3].includes(op.level)) issues.push({ path: `${p}.level`, code: 'bad_level', message: 'level must be 1, 2 or 3' }); break;
+      case 'paragraph': need('text'); break;
+      case 'callout': need('text'); if (op.tone !== undefined && !TONES.includes(op.tone)) issues.push({ path: `${p}.tone`, code: 'bad_tone', message: `tone must be one of ${TONES.join(', ')}` }); break;
+      case 'definition': need('term'); need('definition'); break;
+      case 'table': {
+        if (!Array.isArray(op.columns) || op.columns.length === 0 || op.columns.length > 5 || !op.columns.every(isStr))
+          issues.push({ path: `${p}.columns`, code: 'bad_table', message: 'columns must be 1..5 non-empty strings' });
+        else if (!Array.isArray(op.rows) || op.rows.length === 0 || op.rows.length > 8 ||
+          !op.rows.every((r) => Array.isArray(r) && r.length === op.columns.length && r.every((c) => typeof c === 'string')))
+          issues.push({ path: `${p}.rows`, code: 'bad_table', message: `rows must be 1..8 arrays of exactly ${op.columns.length} strings` });
+        break;
+      }
+      case 'figure': checkFigure(op, p, narrationWords, issues); break;
+    }
+  }
+
+  function validateLesson(lesson) {
+    const issues = [];
+    const add = (path, code, message) => issues.push({ path, code, message });
+    if (!lesson || typeof lesson !== 'object') return { ok: false, issues: [{ path: '$', code: 'not_object', message: 'lesson must be a JSON object' }] };
+    if (lesson.version !== 1) add('version', 'bad_version', 'version must be 1');
+    const meta = lesson.meta;
+    if (!meta || typeof meta !== 'object') add('meta', 'missing_field', 'meta is required');
+    else {
+      if (!isStr(meta.title)) add('meta.title', 'missing_field', 'meta.title is required');
+      if (!isStr(meta.language)) add('meta.language', 'missing_field', 'meta.language is required (e.g. "en")');
+    }
+    const c = lesson.canvas;
+    if (!c || !isNum(c.logicalWidth) || c.logicalWidth < 400 || c.logicalWidth > 1600) add('canvas.logicalWidth', 'bad_canvas', 'canvas.logicalWidth must be 400..1600');
+    if (!Array.isArray(lesson.beats) || lesson.beats.length === 0) {
+      add('beats', 'no_beats', 'beats must be a non-empty array');
+    } else {
+      const beatIds = new Set();
+      const ids = new Set();
+      lesson.beats.forEach((b, bi) => {
+        const bp = `beats[${bi}]`;
+        if (!b || typeof b !== 'object') return add(bp, 'bad_beat', 'beat must be an object');
+        if (!isStr(b.id)) add(`${bp}.id`, 'missing_field', 'beat needs an id');
+        else if (beatIds.has(b.id)) add(`${bp}.id`, 'duplicate_id', `duplicate beat id "${b.id}"`);
+        else beatIds.add(b.id);
+        const words = wordCount(b.narration);
+        if (words < 5) add(`${bp}.narration`, 'short_narration', 'narration needs at least 5 words');
+        if (words > 90) add(`${bp}.narration`, 'long_narration', `narration has ${words} words; keep each beat under 90`);
+        if (!Array.isArray(b.ops) || b.ops.length === 0) add(`${bp}.ops`, 'no_ops', 'beat needs at least one op');
+        else b.ops.forEach((op, oi) => checkOp(op, `${bp}.ops[${oi}]`, words, ids, issues));
+      });
+    }
+    if (lesson.checks !== undefined) {
+      if (!Array.isArray(lesson.checks)) add('checks', 'bad_checks', 'checks must be an array');
+      else lesson.checks.forEach((q, qi) => {
+        const qp = `checks[${qi}]`;
+        if (!q || !isStr(q.question)) add(`${qp}.question`, 'missing_field', 'check needs a question');
+        if (!q || !Array.isArray(q.options) || q.options.length < 2 || !q.options.every(isStr)) add(`${qp}.options`, 'bad_checks', 'options must be 2+ non-empty strings');
+        else if (!Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.options.length) add(`${qp}.answer`, 'bad_checks', 'answer must be a valid option index');
+        if (q && !isStr(q.explanation)) add(`${qp}.explanation`, 'missing_field', 'check needs an explanation');
+      });
+    }
+    return { ok: issues.length === 0, issues };
+  }
+
+  /* ---------- automatic layout repair ----------
+   * Models are poor at coordinate arithmetic, so geometry mistakes (arrows that end in empty space, labels sitting
+   * on lines, labels far from what they name) are fixed here by code instead of by asking the model again.
+   * autofixLesson() returns a corrected copy plus a list of what it changed. The validator still runs afterwards.
+   */
+  const SNAP_MAX = 140;   // farthest an arrow/leader end is pulled to reach an object or label
+  const validMark = (m) => !!m && typeof m === 'object' && MARK_KINDS.includes(m.kind) &&
+    REQUIRED[m.kind].every((f) => (m.kind === 'path' ? isStr(m.d) : m.kind === 'label' && f === 'text' ? isStr(m.text) : isNum(m[f])));
+
+  function figureModel(op) {
+    const strokes = [], labels = [];
+    (Array.isArray(op.parts) ? op.parts : []).forEach((part, pi) => {
+      (part && Array.isArray(part.marks) ? part.marks : []).forEach((m) => {
+        if (!validMark(m)) return;
+        if (m.kind === 'label') labels.push({ m, part: pi });
+        else if (m.kind !== 'path' || !pathPoints(m.d).error) strokes.push({ m, lines: markStrokes(m), part: pi });
+      });
+    });
+    return { strokes, labels };
+  }
+  const boxOf = (lb) => markBox(lb.m, [], '');
+
+  function nearestPointOnMark(pt, s) {
+    const m = s.m;
+    if (m.kind === 'circle' || m.kind === 'ellipse') {
+      const rx = m.kind === 'circle' ? m.r : m.rx, ry = m.kind === 'circle' ? m.r : m.ry;
+      const vx = pt[0] - m.cx, vy = pt[1] - m.cy, n = Math.hypot(vx / rx, vy / ry) || 1e-9;
+      return [m.cx + vx / n, m.cy + vy / n];
+    }
+    let best = pt, bd = Infinity;
+    for (const pl of s.lines) for (let k = 1; k < pl.length; k++) {
+      const a = pl[k - 1], b = pl[k], dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+      const t = l2 ? Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / l2)) : 0;
+      const q = [a[0] + t * dx, a[1] + t * dy], d = Math.hypot(pt[0] - q[0], pt[1] - q[1]);
+      if (d < bd) { bd = d; best = q; }
+    }
+    return best;
+  }
+  const nearestPointOnBox = (pt, box) => [
+    Math.min(Math.max(pt[0], box[0] - 3), box[2] + 3), Math.min(Math.max(pt[1], box[1] - 3), box[3] + 3)];
+
+  function layoutFigure(op, changes, where) {
+    const frame = op.frame && isNum(op.frame.width) && isNum(op.frame.height) ? op.frame : null;
+    const { strokes, labels } = figureModel(op);
+    const note = (msg) => changes.push(`${where}: ${msg}`);
+
+    const CLEARANCE = 6; // the fixer wants breathing room around text; the validator only rejects actual crossings
+    const crossing = (lb) => {
+      const b = boxOf(lb), ik = inkBox(b), ink = [ik[0] - CLEARANCE, ik[1] - CLEARANCE, ik[2] + CLEARANCE, ik[3] + CLEARANCE];
+      return strokes.some((s) => {
+        if (s.m.kind === 'line' && (distToBox([s.m.x1, s.m.y1], b) <= 12 || distToBox([s.m.x2, s.m.y2], b) <= 12)) return false;
+        return s.lines.some((pl) => pl.some((pt, k) => k > 0 && segmentHitsBox(pl[k - 1], pt, ink)));
+      });
+    };
+    const clashes = (lb) => labels.some((o) => o !== lb && overlap(boxOf(o), boxOf(lb)));
+    const outside = (lb) => {
+      if (!frame) return false;
+      const b = boxOf(lb);
+      return b[0] < 2 || b[1] < 2 || b[2] > frame.width - 2 || b[3] > frame.height - 2;
+    };
+    const bad = (lb) => crossing(lb) || clashes(lb) || outside(lb);
+    const ownPool = (lb) => { const own = strokes.filter((s) => s.part === lb.part); return own.length ? own : strokes; };
+    const ownDist = (lb) => { const p = ownPool(lb); return p.length ? Math.min(...p.map((s) => distBoxToMark(boxOf(lb), s))) : 0; };
+
+    // Put a label's box centre at (tx,ty), honouring its alignment.
+    const placeLabel = (lb, tx, ty) => {
+      const m = lb.m, size = isNum(m.size) ? m.size : 20, w = String(m.text).length * size * LABEL_CHAR_W;
+      m.x = Math.round(m.align === 'middle' ? tx : m.align === 'end' ? tx + w / 2 : tx - w / 2);
+      m.y = Math.round(ty + size * 0.375);
+    };
+
+    const pullOrphans = () => {
+      for (const lb of labels) {
+        if (!strokes.length || ownDist(lb) <= ORPHAN_DIST) continue;
+        const b = boxOf(lb), c = [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2], x0 = lb.m.x, y0 = lb.m.y;
+        let q = null, qd = Infinity;
+        for (const s of ownPool(lb)) { const p = nearestPointOnMark(c, s), d = Math.hypot(c[0] - p[0], c[1] - p[1]); if (d < qd) { qd = d; q = p; } }
+        if (!q) continue;
+        const vx = (c[0] - q[0]) / (qd || 1), vy = (c[1] - q[1]) / (qd || 1);
+        let moved = false;
+        for (const g of [30, 42, 56]) {
+          for (const [ux, uy] of [[vx, vy], [0, 1], [0, -1], [1, 0], [-1, 0]]) {
+            placeLabel(lb, q[0] + ux * g, q[1] + uy * g);
+            if (!bad(lb) && ownDist(lb) <= ORPHAN_DIST) { moved = true; break; }
+          }
+          if (moved) break;
+        }
+        if (moved) note(`moved label "${lb.m.text}" next to its drawing`); else { lb.m.x = x0; lb.m.y = y0; }
+      }
+    };
+
+    const nudge = () => {
+      for (const lb of labels) {
+        if (!bad(lb)) continue;
+        const x0 = lb.m.x, y0 = lb.m.y;
+        let found = false;
+        search: for (const r of [10, 20, 30, 42, 56, 72, 90]) {
+          for (let a = 0; a < 16; a++) {
+            const ang = (a / 16) * 2 * Math.PI;
+            lb.m.x = x0 + Math.round(Math.cos(ang) * r);
+            lb.m.y = y0 + Math.round(Math.sin(ang) * r);
+            if (!bad(lb) && ownDist(lb) <= ORPHAN_DIST - 15) { found = true; break search; }
+          }
+        }
+        if (found) note(`nudged label "${lb.m.text}" off a line/outline`); else { lb.m.x = x0; lb.m.y = y0; }
+      }
+    };
+
+    const snap = () => {
+      const touching = (pt, self) => [
+        ...strokes.filter((s) => s !== self && distPointToMark(pt, s) <= ATTACH_TOL),
+        ...labels.filter((lb) => distToBox(pt, boxOf(lb)) <= ATTACH_TOL),
+      ];
+      for (const s of strokes) {
+        const m = s.m;
+        if (m.kind !== 'arrow' && m.kind !== 'line') continue;
+        if (m.kind === 'line' && Math.hypot(m.x2 - m.x1, m.y2 - m.y1) < 40) continue;
+        const ends = [[m.x1, m.y1], [m.x2, m.y2]], touch = ends.map((e) => touching(e, s));
+        const free = [0, 1].filter((i) => touch[i].length === 0);
+        // A plain line may stand alone (axis, ground, divider); only a half-attached one is a broken leader line.
+        const fix = m.kind === 'arrow' ? free : free.length === 1 ? free : [];
+        for (const i of fix) {
+          const other = touch[1 - i];
+          let best = null;
+          for (const t of strokes) {
+            if (t === s || t.m.kind === 'arrow' || other.includes(t)) continue;
+            const d = distPointToMark(ends[i], t);
+            if (d <= SNAP_MAX && (!best || d < best.d)) best = { d, q: nearestPointOnMark(ends[i], t) };
+          }
+          for (const lb of labels) {
+            if (other.includes(lb)) continue;
+            const b = boxOf(lb), d = distToBox(ends[i], b) * (m.kind === 'line' ? 0.6 : 1); // leaders prefer labels
+            if (d <= SNAP_MAX && (!best || d < best.d)) best = { d, q: nearestPointOnBox(ends[i], b) };
+          }
+          if (!best) continue;
+          const nx = i === 0 ? [best.q[0], best.q[1], m.x2, m.y2] : [m.x1, m.y1, best.q[0], best.q[1]];
+          if (Math.hypot(nx[2] - nx[0], nx[3] - nx[1]) < 20) continue; // would collapse the arrow
+          const was = `(${Math.round(ends[i][0])},${Math.round(ends[i][1])})`;
+          [m.x1, m.y1, m.x2, m.y2] = nx.map((v) => Math.round(v * 10) / 10);
+          s.lines = markStrokes(m);
+          note(`snapped ${m.kind} ${i === 0 ? 'start' : 'end'} from ${was} onto the nearest object/label`);
+        }
+      }
+    };
+
+    pullOrphans(); nudge(); snap(); nudge();
+  }
+
+  function autofixLesson(lesson) {
+    const copy = JSON.parse(JSON.stringify(lesson));
+    const changes = [];
+    if (copy && Array.isArray(copy.beats))
+      copy.beats.forEach((b, bi) => {
+        if (!b || !Array.isArray(b.ops)) return;
+        b.ops.forEach((op, oi) => { if (op && op.type === 'figure') layoutFigure(op, changes, `beats[${bi}].ops[${oi}]`); });
+      });
+    return { lesson: copy, changes };
+  }
+
+  const api = { validateLesson, autofixLesson, pathPoints, PALETTE, OP_TYPES, MARK_KINDS, TONES };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.PencilValidator = api;
+
+  // CLI
+  if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
+    const fs = require('fs');
+    const fix = process.argv[2] === '--fix';
+    const file = fix ? process.argv[3] : process.argv[2];
+    if (!file) { console.error('usage: node validator.js [--fix] <lesson.json>'); process.exit(2); }
+    let data;
+    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); }
+    catch (e) { console.log(JSON.stringify({ ok: false, issues: [{ path: '$', code: 'invalid_json', message: String(e.message) }] })); process.exit(1); }
+    if (fix) { console.log(JSON.stringify(autofixLesson(data))); process.exit(0); } // {lesson, changes}
+    const r = validateLesson(data);
+    console.log(JSON.stringify(r, null, 2));
+    process.exit(r.ok ? 0 : 1);
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(() => {
+  'use strict';
+  const NS = 'http://www.w3.org/2000/svg';
+  const COLORS = { ink:'#1f2430', blue:'#2f5fd0', red:'#d33a3a', green:'#2e9b5a', orange:'#e08a1e', purple:'#7b4fc9', gray:'#7a8090' };
+  const STAGGER_MS = 450;
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+
+  const state = { lesson: null, beats: [], cur: -1, playing: false, run: 0, timers: [], quiz: false, errors: [] };
+  window.__pencil = state; // exposed for tests
+
+  function h(tag, cls, text) {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text !== undefined) el.textContent = text;
+    return el;
+  }
+  function svgEl(name, attrs) {
+    const el = document.createElementNS(NS, name);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  /* ---------- rendering ---------- */
+  /** Arrow = shaft that draws on, then a filled triangular head at (x2,y2). The head is computed here so
+   *  the model never has to hand-draw one. */
+  function arrowEl(m, color) {
+    const w = m.width || 3;
+    const dx = m.x2 - m.x1, dy = m.y2 - m.y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const hl = Math.min(len * 0.6, Math.max(14, w * 5)), hw = hl * 0.45;
+    const bx = m.x2 - ux * hl, by = m.y2 - uy * hl; // base of the head
+    const g = svgEl('g', {});
+    const shaft = svgEl('line', { x1: m.x1, y1: m.y1, x2: bx, y2: by, stroke: color, 'stroke-width': w, 'stroke-linecap': 'round', fill: 'none' });
+    if (m.dashed) { shaft.setAttribute('stroke-dasharray', '9 7'); shaft.classList.add('fade'); }
+    else { shaft.setAttribute('pathLength', '1'); shaft.classList.add('stroke'); }
+    const head = svgEl('path', {
+      d: `M ${m.x2} ${m.y2} L ${bx - uy * hw} ${by + ux * hw} L ${bx + uy * hw} ${by - ux * hw} Z`,
+      fill: color, stroke: color, 'stroke-width': 1, 'stroke-linejoin': 'round',
+    });
+    head.classList.add('fade');
+    g.append(shaft, head);
+    return g;
+  }
+
+  function markEl(m) {
+    const color = COLORS[m.color] || COLORS.ink;
+    if (m.kind === 'label') {
+      const t = svgEl('text', { x: m.x, y: m.y, 'text-anchor': m.align || 'start', 'font-size': m.size || 20, fill: color, class: 'label' });
+      t.textContent = m.text;
+      return t;
+    }
+    if (m.kind === 'arrow') return arrowEl(m, color);
+    let el;
+    switch (m.kind) {
+      case 'ellipse': el = svgEl('ellipse', { cx: m.cx, cy: m.cy, rx: m.rx, ry: m.ry }); break;
+      case 'circle': el = svgEl('circle', { cx: m.cx, cy: m.cy, r: m.r }); break;
+      case 'rect': el = svgEl('rect', { x: m.x, y: m.y, width: m.w, height: m.h, rx: m.radius || 6 }); break;
+      case 'line': el = svgEl('line', { x1: m.x1, y1: m.y1, x2: m.x2, y2: m.y2 }); break;
+      case 'path': el = svgEl('path', { d: m.d }); break;
+      default: return null;
+    }
+    el.setAttribute('stroke', color);
+    el.setAttribute('stroke-width', m.width || 3);
+    el.setAttribute('stroke-linecap', 'round');
+    el.setAttribute('stroke-linejoin', 'round');
+    el.setAttribute('fill', m.fill || 'none');
+    if (m.fill) el.classList.add('filled');
+    if (m.dashed) {
+      el.setAttribute('stroke-dasharray', '9 7');
+      el.classList.add('fade');
+    } else {
+      el.setAttribute('pathLength', '1');
+      el.classList.add('stroke');
+    }
+    return el;
+  }
+
+  function renderOp(op, parts) {
+    let el = null;
+    switch (op.type) {
+      case 'heading': {
+        const lvl = Math.min(3, Math.max(1, Number(op.level) || 1));
+        el = h('h' + lvl, 'op heading', op.text);
+        break;
+      }
+      case 'paragraph': el = h('p', 'op paragraph', op.text); break;
+      case 'callout': el = h('div', 'op callout tone-' + (op.tone || 'info'), op.text); break;
+      case 'definition': {
+        el = h('div', 'op definition');
+        el.append(h('b', '', op.term), h('span', '', op.definition));
+        break;
+      }
+      case 'table': {
+        el = h('table', 'op tbl');
+        const head = h('tr');
+        (op.columns || []).forEach((c) => head.append(h('th', '', c)));
+        const thead = h('thead'); thead.append(head);
+        const tbody = h('tbody');
+        (op.rows || []).forEach((r) => {
+          const tr = h('tr');
+          r.forEach((c) => tr.append(h('td', '', c)));
+          tbody.append(tr);
+        });
+        el.append(thead, tbody);
+        break;
+      }
+      case 'figure': {
+        el = h('div', 'op figure');
+        const f = op.frame || { width: 800, height: 300 };
+        const svg = svgEl('svg', { viewBox: `0 0 ${f.width} ${f.height}`, role: 'img' });
+        // Two layers so a filled shape drawn later can never cover a label: all shapes first, all labels on top.
+        const shapeLayer = svgEl('g', {}), labelLayer = svgEl('g', {});
+        svg.append(shapeLayer, labelLayer);
+        (op.parts || []).forEach((p) => {
+          const g = svgEl('g', { 'data-part': p.name });
+          const gl = svgEl('g', { 'data-part': p.name });
+          (p.marks || []).forEach((m) => { const me = markEl(m); if (me) (m.kind === 'label' ? gl : g).append(me); });
+          shapeLayer.append(g);
+          labelLayer.append(gl);
+          parts.push({ g, gl, cue: Number.isInteger(p.cue) ? p.cue : 0, fig: el, reached: false, shown: false });
+        });
+        el.append(svg);
+        break;
+      }
+      default: return null;
+    }
+    el.classList.add('reveal');
+    return el;
+  }
+
+  function wordStartsOf(text) {
+    const starts = [];
+    const re = /\S+/g;
+    let m;
+    while ((m = re.exec(text))) starts.push(m.index);
+    return starts;
+  }
+
+  function buildLesson(lesson) {
+    const stage = $('stage');
+    stage.replaceChildren();
+    stage.style.maxWidth = Math.min(1000, Number(lesson.canvas && lesson.canvas.logicalWidth) || 1000) + 'px';
+    state.beats = lesson.beats.map((b, i) => {
+      const section = h('section', 'beat');
+      section.dataset.beat = String(i);
+      section.append(h('p', 'caption', b.narration || ''));
+      const items = [];
+      const parts = [];
+      (b.ops || []).forEach((op) => {
+        const el = renderOp(op || {}, parts);
+        if (el) { section.append(el); items.push(el); }
+      });
+      stage.append(section);
+      return { section, items, parts, narration: b.narration || '', starts: wordStartsOf(b.narration || '') };
+    });
+    const dots = $('dots');
+    dots.replaceChildren();
+    state.beats.forEach((_, i) => {
+      const d = h('button'); d.title = 'Beat ' + (i + 1);
+      d.addEventListener('click', () => goto(i, true));
+      dots.append(d);
+    });
+  }
+
+  /* ---------- reveal state ---------- */
+  function tryDraw(p) {
+    if (p.reached && p.shown) { p.g.classList.add('drawn'); p.gl.classList.add('drawn'); }
+  }
+  function hideBeat(b) {
+    b.section.classList.remove('visible', 'instant');
+    b.items.forEach((el) => el.classList.remove('in'));
+    b.parts.forEach((p) => { p.g.classList.remove('drawn'); p.gl.classList.remove('drawn'); p.reached = false; p.shown = false; });
+  }
+  function showInstant(b) {
+    b.section.classList.add('visible', 'instant');
+    b.items.forEach((el) => el.classList.add('in'));
+    b.parts.forEach((p) => { p.reached = true; p.shown = true; p.g.classList.add('drawn'); p.gl.classList.add('drawn'); });
+  }
+  function completeBeat(b) {
+    b.items.forEach((el) => el.classList.add('in'));
+    b.parts.forEach((p) => { p.reached = true; p.shown = true; tryDraw(p); });
+  }
+
+  /* ---------- clock: speech with a timer fallback ---------- */
+  function stopAll() {
+    state.run++;
+    state.timers.forEach(clearTimeout);
+    state.timers = [];
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+  }
+  function later(fn, ms, run) {
+    const t = setTimeout(() => { if (run === state.run) fn(); }, Math.max(0, ms));
+    state.timers.push(t);
+  }
+
+  function runNarration(beat, run, onWord, onEnd) {
+    const nWords = beat.starts.length;
+    const rate = Number($('speed').value) || 1;
+    const wps = 2.6 * rate; // words per second estimate
+    const estMs = (nWords / wps + 0.8) * 1000;
+    let finished = false;
+    const finish = () => { if (finished || run !== state.run) return; finished = true; onEnd(); };
+    const timerCues = (offsetMs) => { for (let k = 0; k < nWords; k++) later(() => onWord(k), (k / wps) * 1000 - offsetMs, run); };
+
+    if (!('speechSynthesis' in window) || $('mute').checked || nWords === 0) {
+      timerCues(0);
+      later(finish, estMs, run);
+      return;
+    }
+    const wordAt = (ci) => {
+      let k = 0;
+      for (let i = 0; i < beat.starts.length; i++) { if (beat.starts[i] <= ci) k = i; else break; }
+      return k;
+    };
+    const u = new SpeechSynthesisUtterance(beat.narration);
+    u.rate = rate;
+    u.lang = (state.lesson.meta && state.lesson.meta.language) || 'en';
+    let gotBoundary = false;
+    u.onboundary = (e) => { if (run === state.run) { gotBoundary = true; onWord(wordAt(e.charIndex)); } };
+    u.onend = finish;
+    u.onerror = () => { if (run === state.run && !gotBoundary) { timerCues(0); later(finish, estMs, run); } else finish(); };
+    speechSynthesis.speak(u);
+    // Some voices never fire word boundaries: after 1.5s fall back to estimated cue times.
+    later(() => { if (!gotBoundary) timerCues(1500); }, 1500, run);
+    later(finish, estMs * 2 + 4000, run); // watchdog
+  }
+
+  /* ---------- playback ---------- */
+  function setStatus() {
+    const n = state.beats.length;
+    $('status').textContent = state.cur < 0 ? `${n} beats` : state.quiz ? 'Quiz' : `Beat ${state.cur + 1} / ${n}`;
+    [...$('dots').children].forEach((d, i) => d.classList.toggle('on', i <= state.cur));
+    $('prev').disabled = !state.lesson || state.cur <= 0;
+    $('next').disabled = !state.lesson || (state.cur >= n - 1 && !(state.lesson.checks || []).length) || state.quiz;
+    $('play').disabled = !state.lesson;
+    $('play').textContent = state.playing ? 'Pause' : 'Play';
+  }
+
+  function removeQuiz() { const q = document.querySelector('.quiz'); if (q) q.remove(); state.quiz = false; }
+
+  function showQuiz() {
+    stopAll();
+    state.playing = false;
+    const checks = state.lesson.checks || [];
+    if (!checks.length) { setStatus(); return; }
+    removeQuiz();
+    const box = h('section', 'quiz');
+    box.append(h('h2', 'heading', 'Check yourself'));
+    checks.forEach((q) => {
+      const card = h('div', 'q');
+      card.append(h('p', '', q.question));
+      const why = h('div', 'why'); why.hidden = true;
+      (q.options || []).forEach((opt, oi) => {
+        const b = h('button', '', opt);
+        b.addEventListener('click', () => {
+          [...card.querySelectorAll('button')].forEach((x, xi) => {
+            x.disabled = true;
+            if (xi === q.answer) x.classList.add('right');
+          });
+          if (oi !== q.answer) b.classList.add('wrong');
+          why.textContent = q.explanation || '';
+          why.hidden = false;
+        });
+        card.append(b);
+      });
+      card.append(why);
+      box.append(card);
+    });
+    $('stage').append(box);
+    state.quiz = true;
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setStatus();
+  }
+
+  function goto(i, animate) {
+    if (!state.lesson) return;
+    const n = state.beats.length;
+    if (i < 0 || i >= n) return;
+    stopAll();
+    const run = state.run;
+    removeQuiz();
+    state.cur = i;
+    state.playing = !!animate;
+    state.beats.forEach((b, k) => { if (k < i) showInstant(b); else if (k > i) hideBeat(b); });
+    const b = state.beats[i];
+    if (!animate) { showInstant(b); setStatus(); return; }
+    hideBeat(b);
+    void b.section.offsetWidth; // flush so transitions replay
+    b.section.classList.add('visible');
+    b.section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    b.items.forEach((el, idx) => later(() => {
+      el.classList.add('in');
+      b.parts.forEach((p) => { if (p.fig === el) { p.shown = true; tryDraw(p); } });
+    }, idx * STAGGER_MS, run));
+    const onWord = (w) => b.parts.forEach((p) => { if (!p.reached && p.cue <= w) { p.reached = true; tryDraw(p); } });
+    runNarration(b, run, onWord, () => {
+      completeBeat(b);
+      later(() => { if (i + 1 < n) goto(i + 1, true); else showQuiz(); }, 700, run);
+    });
+    setStatus();
+  }
+
+  /* ---------- loading ---------- */
+  function showIssues(issues) {
+    const box = $('issues');
+    if (!issues.length) { box.hidden = true; box.replaceChildren(); return; }
+    box.hidden = false;
+    box.replaceChildren(h('b', '', `${issues.length} validation issue${issues.length === 1 ? '' : 's'}`));
+    const ul = h('ul');
+    issues.slice(0, 25).forEach((i) => ul.append(h('li', '', `${i.path}: ${i.message}`)));
+    box.append(ul);
+  }
+
+  function loadLesson(lesson) {
+    stopAll();
+    state.playing = false; state.cur = -1; state.quiz = false; state.lesson = null; state.beats = [];
+    // Repair loose arrow ends and label placement before showing (geometry is code's job). Bad input stays as-is.
+    state.autofixChanges = [];
+    try {
+      if (lesson && Array.isArray(lesson.beats)) {
+        const fixed = window.PencilValidator.autofixLesson(lesson);
+        lesson = fixed.lesson;
+        state.autofixChanges = fixed.changes;
+      }
+    } catch (e) { /* malformed lesson: fall through, the validator will report it */ }
+    const result = window.PencilValidator.validateLesson(lesson);
+    showIssues(result.issues);
+    if (!lesson || !Array.isArray(lesson.beats) || lesson.beats.length === 0) {
+      $('stage').replaceChildren(h('div', '', 'This lesson has no beats to show.'));
+      $('stage').firstChild.id = 'empty';
+      setStatus();
+      return false;
+    }
+    try {
+      state.lesson = lesson;
+      buildLesson(lesson);
+      $('title').textContent = (lesson.meta && lesson.meta.title) || 'Untitled lesson';
+      document.title = $('title').textContent;
+      setStatus();
+      return true;
+    } catch (e) {
+      state.lesson = null;
+      state.errors.push(String(e));
+      showIssues([{ path: '$', message: 'Could not render: ' + e.message }]);
+      setStatus();
+      return false;
+    }
+  }
+
+  function parseAndLoad(text) {
+    let obj;
+    try { obj = JSON.parse(text); }
+    catch (e) { showIssues([{ path: '$', message: 'Invalid JSON: ' + e.message }]); return false; }
+    return loadLesson(obj);
+  }
+
+  /* ---------- wiring ---------- */
+  $('play').addEventListener('click', () => {
+    if (!state.lesson) return;
+    if (state.playing) { stopAll(); state.playing = false; setStatus(); return; }
+    goto(state.cur < 0 || state.quiz ? 0 : state.cur, true);
+  });
+  $('wobble-toggle').addEventListener('change', (e) => $('stage').classList.toggle('wobble', e.target.checked));
+  $('prev').addEventListener('click', () => goto(Math.max(0, state.cur - 1), true));
+  $('next').addEventListener('click', () => { if (state.cur >= state.beats.length - 1) showQuiz(); else goto(state.cur + 1, true); });
+  $('sample-btn').addEventListener('click', () => parseAndLoad($('sample').textContent));
+  $('paste-btn').addEventListener('click', () => parseAndLoad($('paste').value));
+  $('file').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => parseAndLoad(String(r.result));
+    r.readAsText(f);
+  });
+
+  /* ---------- boot ---------- */
+  if (params.get('speed')) $('speed').value = params.get('speed');
+  if (params.get('mute') === '1') $('mute').checked = true;
+  if (params.get('wobble') === '1') { $('wobble-toggle').checked = true; $('stage').classList.add('wobble'); }
+  const src = params.get('src');
+  const boot = src
+    ? fetch(src).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    : Promise.resolve($('sample').textContent);
+  boot.then((t) => { if (parseAndLoad(t) && params.get('autoplay') === '1') goto(0, true); })
+      .catch((e) => showIssues([{ path: 'src', message: 'Could not load lesson: ' + e.message }]));
+})();
+</script>
+</body>
+</html>

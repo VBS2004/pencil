@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<title>Supertonic browser test</title>
+<script src="vendor/ort/ort.wasm.min.js"></script>
+<script type="module">
+  import { SupertonicTTS, encodeWav } from './supertonic.js';
+  // Used by the Playwright script: load once, then narrate whatever text it is given.
+  let tts = null, voice = null;
+  window.__init = async () => {
+    const t0 = performance.now();
+    const q = new URLSearchParams(location.search), model = 'models/' + (q.get('model') || 'supertonic-3-int8');
+    tts = await SupertonicTTS.load({ modelBase: model, ortBase: 'vendor/ort/', cacheName: q.get('nocache') ? null : undefined });
+    voice = await tts.loadVoice(`${model}/voice_styles/${q.get('voice') || 'M1'}.json`);
+    return { loadSeconds: tts.loadSeconds, totalInitSeconds: (performance.now() - t0) / 1000, fromCache: tts.fromCache, threads: tts.threads, isolated: crossOriginIsolated };
+  };
+  window.__speak = async (text, opts = {}) => {
+    const t0 = performance.now();
+    const r = await tts.speak(text, { voice, ...opts });
+    const wall = (performance.now() - t0) / 1000;
+    // Hand the WAV back as base64 so the test can save it.
+    const bytes = new Uint8Array(encodeWav(r.samples, r.sampleRate));
+    let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    let peak = 0, sum = 0; for (const s of r.samples) { peak = Math.max(peak, Math.abs(s)); sum += s * s; }
+    return { wav: btoa(bin), audioSeconds: r.seconds, genSeconds: wall, rtf: wall / r.seconds, peak, rms: Math.sqrt(sum / r.samples.length), words: r.words, chunks: r.chunks };
+  };
+  window.__ready = true;
+</script>

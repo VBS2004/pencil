@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pencil player</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --ink:#1f2430; --paper:#fbf7ef; --accent:#5146d9; --line:#e6dfd0; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font:17px/1.55 "Nunito", "Segoe UI", system-ui, sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:#fffdf8ee; backdrop-filter:blur(6px); border-bottom:1px solid var(--line); padding:10px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  header h1 { font-size:18px; margin:0 12px 0 0; }
+  button, select, label.btn { font:inherit; font-size:15px; border:1px solid var(--line); background:#fff; border-radius:10px; padding:6px 12px; cursor:pointer; color:var(--ink); }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; min-width:84px; }
+  button:disabled { opacity:.4; cursor:default; }
+  #status { font-size:14px; opacity:.7; margin-left:auto; }
+  #dots { display:flex; gap:6px; width:100%; }
+  #dots button { flex:1; height:8px; padding:0; border-radius:4px; background:var(--line); border:0; }
+  #dots button.on { background:var(--accent); }
+  #loader { max-width:1000px; margin:10px auto 0; padding:0 16px; font-size:14px; }
+  #loader summary { cursor:pointer; opacity:.75; }
+  #paste { width:100%; height:120px; font:13px/1.4 ui-monospace, Menlo, monospace; margin:8px 0; }
+  #issues { max-width:1000px; margin:10px auto; padding:10px 16px; background:#fff3f0; border:1px solid #f0c4b8; border-radius:10px; font-size:14px; }
+  #issues ul { margin:6px 0 0; padding-left:20px; }
+  #issues[hidden] { display:none; }
+  #stage { margin:0 auto; padding:20px 16px 120px; }
+  .beat { display:none; margin-bottom:34px; }
+  .beat.visible { display:block; }
+  .caption { font-size:14px; font-style:italic; opacity:.6; margin:0 0 10px; border-left:3px solid var(--line); padding-left:10px; }
+  .reveal { opacity:0; transform:translateY(8px); transition:opacity .5s, transform .5s; }
+  .reveal.in { opacity:1; transform:none; }
+  .instant, .instant * { transition:none !important; }
+  .heading { font-family:"Baloo 2", "Segoe Print", "Comic Sans MS", cursive; margin:.3em 0; }
+  h1.heading { font-size:40px; } h2.heading { font-size:30px; } h3.heading { font-size:24px; }
+  .paragraph { margin:.6em 0; font-size:19px; }
+  .callout { margin:14px 0; padding:12px 16px; border-radius:12px; background:#eef0ff; border-left:5px solid var(--accent); font-weight:600; }
+  .callout.tone-tip { background:#e9f7ee; border-color:#2e9b5a; }
+  .callout.tone-warn { background:#fff1e0; border-color:#e08a1e; }
+  .callout.tone-key { background:#eef0ff; border-color:var(--accent); }
+  .definition { margin:14px 0; padding:12px 16px; background:#fff; border:2px dashed #b9b2f5; border-radius:12px; }
+  .definition b { color:var(--accent); margin-right:8px; }
+  table.tbl { border-collapse:collapse; width:100%; margin:14px 0; background:#fff; border-radius:10px; overflow:hidden; }
+  table.tbl th, table.tbl td { border:1px solid var(--line); padding:8px 12px; text-align:left; }
+  table.tbl th { background:#f3efe4; }
+  .figure { margin:14px 0; background:#fff; border:1px solid var(--line); border-radius:14px; padding:10px; }
+  .figure svg { width:100%; height:auto; display:block; }
+  #stage.wobble .figure svg { filter:url(#wobble); } /* opt-in: displacement can notch thin strokes */
+  .figure .stroke { stroke-dasharray:1; stroke-dashoffset:1; transition:stroke-dashoffset .9s ease; }
+  .drawn .stroke { stroke-dashoffset:0; }
+  .figure .filled { fill-opacity:0; transition:fill-opacity .6s .5s; }
+  .drawn .filled { fill-opacity:1; }
+  .figure .fade { opacity:0; transition:opacity .6s; }
+  .drawn .fade { opacity:1; }
+  .figure .label { opacity:0; transition:opacity .5s .3s; font-family:"Patrick Hand", "Segoe Print", "Comic Sans MS", cursive; }
+  .drawn .label { opacity:1; }
+  .quiz { border-top:2px dashed var(--line); padding-top:20px; }
+  .q { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:14px 0; }
+  .q p { margin:0 0 8px; font-weight:700; }
+  .q button { display:block; width:100%; text-align:left; margin:6px 0; }
+  .q button.right { background:#e0f5e8; border-color:#2e9b5a; }
+  .q button.wrong { background:#fde5e1; border-color:#d33a3a; }
+  .q .why { margin-top:8px; font-size:15px; opacity:.85; }
+  #empty { text-align:center; opacity:.6; padding:60px 0; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <filter id="wobble" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.008" numOctaves="1" seed="3" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="5"/>
+    </filter>
+  </defs>
+</svg>
+
+<header>
+  <h1 id="title">Pencil player</h1>
+  <button id="prev" title="Previous beat" disabled>&#9664;</button>
+  <button id="play" class="primary" disabled>Play</button>
+  <button id="next" title="Next beat" disabled>&#9654;</button>
+  <select id="speed" title="Narration speed" aria-label="Narration speed">
+    <option value="0.75">0.75&times;</option>
+    <option value="1" selected>1&times;</option>
+    <option value="1.25">1.25&times;</option>
+    <option value="1.5">1.5&times;</option>
+    <option value="3">3&times;</option>
+  </select>
+  <label class="btn"><input type="checkbox" id="mute"> Silent</label>
+  <label class="btn" title="Hand-drawn wobble (can slightly notch thin lines)"><input type="checkbox" id="wobble-toggle"> Wobble</label>
+  <span id="status">No lesson loaded</span>
+  <div id="dots"></div>
+</header>
+
+<details id="loader">
+  <summary>Load a lesson</summary>
+  <p>
+    <button id="sample-btn">Load sample</button>
+    <label class="btn">Open JSON file <input type="file" id="file" accept="application/json,.json" hidden></label>
+  </p>
+  <textarea id="paste" placeholder="...or paste lesson JSON here" spellcheck="false"></textarea>
+  <button id="paste-btn">Load pasted JSON</button>
+</details>
+
+<div id="issues" hidden></div>
+<main id="stage"><div id="empty">Load a lesson to begin.</div></main>
+
+<script type="application/json" id="sample">__SAMPLE__</script>
+<script src="validator.js"></script>
+<script>
+(() => {
+  'use strict';
+  const NS = 'http://www.w3.org/2000/svg';
+  const COLORS = { ink:'#1f2430', blue:'#2f5fd0', red:'#d33a3a', green:'#2e9b5a', orange:'#e08a1e', purple:'#7b4fc9', gray:'#7a8090' };
+  const STAGGER_MS = 450;
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+
+  const state = { lesson: null, beats: [], cur: -1, playing: false, run: 0, timers: [], quiz: false, errors: [] };
+  window.__pencil = state; // exposed for tests
+
+  function h(tag, cls, text) {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text !== undefined) el.textContent = text;
+    return el;
+  }
+  function svgEl(name, attrs) {
+    const el = document.createElementNS(NS, name);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  /* ---------- rendering ---------- */
+  /** Arrow = shaft that draws on, then a filled triangular head at (x2,y2). The head is computed here so
+   *  the model never has to hand-draw one. */
+  function arrowEl(m, color) {
+    const w = m.width || 3;
+    const dx = m.x2 - m.x1, dy = m.y2 - m.y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const hl = Math.min(len * 0.6, Math.max(14, w * 5)), hw = hl * 0.45;
+    const bx = m.x2 - ux * hl, by = m.y2 - uy * hl; // base of the head
+    const g = svgEl('g', {});
+    const shaft = svgEl('line', { x1: m.x1, y1: m.y1, x2: bx, y2: by, stroke: color, 'stroke-width': w, 'stroke-linecap': 'round', fill: 'none' });
+    if (m.dashed) { shaft.setAttribute('stroke-dasharray', '9 7'); shaft.classList.add('fade'); }
+    else { shaft.setAttribute('pathLength', '1'); shaft.classList.add('stroke'); }
+    const head = svgEl('path', {
+      d: `M ${m.x2} ${m.y2} L ${bx - uy * hw} ${by + ux * hw} L ${bx + uy * hw} ${by - ux * hw} Z`,
+      fill: color, stroke: color, 'stroke-width': 1, 'stroke-linejoin': 'round',
+    });
+    head.classList.add('fade');
+    g.append(shaft, head);
+    return g;
+  }
+
+  function markEl(m) {
+    const color = COLORS[m.color] || COLORS.ink;
+    if (m.kind === 'label') {
+      const t = svgEl('text', { x: m.x, y: m.y, 'text-anchor': m.align || 'start', 'font-size': m.size || 20, fill: color, class: 'label' });
+      t.textContent = m.text;
+      return t;
+    }
+    if (m.kind === 'arrow') return arrowEl(m, color);
+    let el;
+    switch (m.kind) {
+      case 'ellipse': el = svgEl('ellipse', { cx: m.cx, cy: m.cy, rx: m.rx, ry: m.ry }); break;
+      case 'circle': el = svgEl('circle', { cx: m.cx, cy: m.cy, r: m.r }); break;
+      case 'rect': el = svgEl('rect', { x: m.x, y: m.y, width: m.w, height: m.h, rx: m.radius || 6 }); break;
+      case 'line': el = svgEl('line', { x1: m.x1, y1: m.y1, x2: m.x2, y2: m.y2 }); break;
+      case 'path': el = svgEl('path', { d: m.d }); break;
+      default: return null;
+    }
+    el.setAttribute('stroke', color);
+    el.setAttribute('stroke-width', m.width || 3);
+    el.setAttribute('stroke-linecap', 'round');
+    el.setAttribute('stroke-linejoin', 'round');
+    el.setAttribute('fill', m.fill || 'none');
+    if (m.fill) el.classList.add('filled');
+    if (m.dashed) {
+      el.setAttribute('stroke-dasharray', '9 7');
+      el.classList.add('fade');
+    } else {
+      el.setAttribute('pathLength', '1');
+      el.classList.add('stroke');
+    }
+    return el;
+  }
+
+  function renderOp(op, parts) {
+    let el = null;
+    switch (op.type) {
+      case 'heading': {
+        const lvl = Math.min(3, Math.max(1, Number(op.level) || 1));
+        el = h('h' + lvl, 'op heading', op.text);
+        break;
+      }
+      case 'paragraph': el = h('p', 'op paragraph', op.text); break;
+      case 'callout': el = h('div', 'op callout tone-' + (op.tone || 'info'), op.text); break;
+      case 'definition': {
+        el = h('div', 'op definition');
+        el.append(h('b', '', op.term), h('span', '', op.definition));
+        break;
+      }
+      case 'table': {
+        el = h('table', 'op tbl');
+        const head = h('tr');
+        (op.columns || []).forEach((c) => head.append(h('th', '', c)));
+        const thead = h('thead'); thead.append(head);
+        const tbody = h('tbody');
+        (op.rows || []).forEach((r) => {
+          const tr = h('tr');
+          r.forEach((c) => tr.append(h('td', '', c)));
+          tbody.append(tr);
+        });
+        el.append(thead, tbody);
+        break;
+      }
+      case 'figure': {
+        el = h('div', 'op figure');
+        const f = op.frame || { width: 800, height: 300 };
+        const svg = svgEl('svg', { viewBox: `0 0 ${f.width} ${f.height}`, role: 'img' });
+        // Two layers so a filled shape drawn later can never cover a label: all shapes first, all labels on top.
+        const shapeLayer = svgEl('g', {}), labelLayer = svgEl('g', {});
+        svg.append(shapeLayer, labelLayer);
+        (op.parts || []).forEach((p) => {
+          const g = svgEl('g', { 'data-part': p.name });
+          const gl = svgEl('g', { 'data-part': p.name });
+          (p.marks || []).forEach((m) => { const me = markEl(m); if (me) (m.kind === 'label' ? gl : g).append(me); });
+          shapeLayer.append(g);
+          labelLayer.append(gl);
+          parts.push({ g, gl, cue: Number.isInteger(p.cue) ? p.cue : 0, fig: el, reached: false, shown: false });
+        });
+        el.append(svg);
+        break;
+      }
+      default: return null;
+    }
+    el.classList.add('reveal');
+    return el;
+  }
+
+  function wordStartsOf(text) {
+    const starts = [];
+    const re = /\S+/g;
+    let m;
+    while ((m = re.exec(text))) starts.push(m.index);
+    return starts;
+  }
+
+  function buildLesson(lesson) {
+    const stage = $('stage');
+    stage.replaceChildren();
+    stage.style.maxWidth = Math.min(1000, Number(lesson.canvas && lesson.canvas.logicalWidth) || 1000) + 'px';
+    state.beats = lesson.beats.map((b, i) => {
+      const section = h('section', 'beat');
+      section.dataset.beat = String(i);
+      section.append(h('p', 'caption', b.narration || ''));
+      const items = [];
+      const parts = [];
+      (b.ops || []).forEach((op) => {
+        const el = renderOp(op || {}, parts);
+        if (el) { section.append(el); items.push(el); }
+      });
+      stage.append(section);
+      return { section, items, parts, narration: b.narration || '', starts: wordStartsOf(b.narration || '') };
+    });
+    const dots = $('dots');
+    dots.replaceChildren();
+    state.beats.forEach((_, i) => {
+      const d = h('button'); d.title = 'Beat ' + (i + 1);
+      d.addEventListener('click', () => goto(i, true));
+      dots.append(d);
+    });
+  }
+
+  /* ---------- reveal state ---------- */
+  function tryDraw(p) {
+    if (p.reached && p.shown) { p.g.classList.add('drawn'); p.gl.classList.add('drawn'); }
+  }
+  function hideBeat(b) {
+    b.section.classList.remove('visible', 'instant');
+    b.items.forEach((el) => el.classList.remove('in'));
+    b.parts.forEach((p) => { p.g.classList.remove('drawn'); p.gl.classList.remove('drawn'); p.reached = false; p.shown = false; });
+  }
+  function showInstant(b) {
+    b.section.classList.add('visible', 'instant');
+    b.items.forEach((el) => el.classList.add('in'));
+    b.parts.forEach((p) => { p.reached = true; p.shown = true; p.g.classList.add('drawn'); p.gl.classList.add('drawn'); });
+  }
+  function completeBeat(b) {
+    b.items.forEach((el) => el.classList.add('in'));
+    b.parts.forEach((p) => { p.reached = true; p.shown = true; tryDraw(p); });
+  }
+
+  /* ---------- clock: speech with a timer fallback ---------- */
+  function stopAll() {
+    state.run++;
+    state.timers.forEach(clearTimeout);
+    state.timers = [];
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+  }
+  function later(fn, ms, run) {
+    const t = setTimeout(() => { if (run === state.run) fn(); }, Math.max(0, ms));
+    state.timers.push(t);
+  }
+
+  function runNarration(beat, run, onWord, onEnd) {
+    const nWords = beat.starts.length;
+    const rate = Number($('speed').value) || 1;
+    const wps = 2.6 * rate; // words per second estimate
+    const estMs = (nWords / wps + 0.8) * 1000;
+    let finished = false;
+    const finish = () => { if (finished || run !== state.run) return; finished = true; onEnd(); };
+    const timerCues = (offsetMs) => { for (let k = 0; k < nWords; k++) later(() => onWord(k), (k / wps) * 1000 - offsetMs, run); };
+
+    if (!('speechSynthesis' in window) || $('mute').checked || nWords === 0) {
+      timerCues(0);
+      later(finish, estMs, run);
+      return;
+    }
+    const wordAt = (ci) => {
+      let k = 0;
+      for (let i = 0; i < beat.starts.length; i++) { if (beat.starts[i] <= ci) k = i; else break; }
+      return k;
+    };
+    const u = new SpeechSynthesisUtterance(beat.narration);
+    u.rate = rate;
+    u.lang = (state.lesson.meta && state.lesson.meta.language) || 'en';
+    let gotBoundary = false;
+    u.onboundary = (e) => { if (run === state.run) { gotBoundary = true; onWord(wordAt(e.charIndex)); } };
+    u.onend = finish;
+    u.onerror = () => { if (run === state.run && !gotBoundary) { timerCues(0); later(finish, estMs, run); } else finish(); };
+    speechSynthesis.speak(u);
+    // Some voices never fire word boundaries: after 1.5s fall back to estimated cue times.
+    later(() => { if (!gotBoundary) timerCues(1500); }, 1500, run);
+    later(finish, estMs * 2 + 4000, run); // watchdog
+  }
+
+  /* ---------- playback ---------- */
+  function setStatus() {
+    const n = state.beats.length;
+    $('status').textContent = state.cur < 0 ? `${n} beats` : state.quiz ? 'Quiz' : `Beat ${state.cur + 1} / ${n}`;
+    [...$('dots').children].forEach((d, i) => d.classList.toggle('on', i <= state.cur));
+    $('prev').disabled = !state.lesson || state.cur <= 0;
+    $('next').disabled = !state.lesson || (state.cur >= n - 1 && !(state.lesson.checks || []).length) || state.quiz;
+    $('play').disabled = !state.lesson;
+    $('play').textContent = state.playing ? 'Pause' : 'Play';
+  }
+
+  function removeQuiz() { const q = document.querySelector('.quiz'); if (q) q.remove(); state.quiz = false; }
+
+  function showQuiz() {
+    stopAll();
+    state.playing = false;
+    const checks = state.lesson.checks || [];
+    if (!checks.length) { setStatus(); return; }
+    removeQuiz();
+    const box = h('section', 'quiz');
+    box.append(h('h2', 'heading', 'Check yourself'));
+    checks.forEach((q) => {
+      const card = h('div', 'q');
+      card.append(h('p', '', q.question));
+      const why = h('div', 'why'); why.hidden = true;
+      (q.options || []).forEach((opt, oi) => {
+        const b = h('button', '', opt);
+        b.addEventListener('click', () => {
+          [...card.querySelectorAll('button')].forEach((x, xi) => {
+            x.disabled = true;
+            if (xi === q.answer) x.classList.add('right');
+          });
+          if (oi !== q.answer) b.classList.add('wrong');
+          why.textContent = q.explanation || '';
+          why.hidden = false;
+        });
+        card.append(b);
+      });
+      card.append(why);
+      box.append(card);
+    });
+    $('stage').append(box);
+    state.quiz = true;
+    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setStatus();
+  }
+
+  function goto(i, animate) {
+    if (!state.lesson) return;
+    const n = state.beats.length;
+    if (i < 0 || i >= n) return;
+    stopAll();
+    const run = state.run;
+    removeQuiz();
+    state.cur = i;
+    state.playing = !!animate;
+    state.beats.forEach((b, k) => { if (k < i) showInstant(b); else if (k > i) hideBeat(b); });
+    const b = state.beats[i];
+    if (!animate) { showInstant(b); setStatus(); return; }
+    hideBeat(b);
+    void b.section.offsetWidth; // flush so transitions replay
+    b.section.classList.add('visible');
+    b.section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    b.items.forEach((el, idx) => later(() => {
+      el.classList.add('in');
+      b.parts.forEach((p) => { if (p.fig === el) { p.shown = true; tryDraw(p); } });
+    }, idx * STAGGER_MS, run));
+    const onWord = (w) => b.parts.forEach((p) => { if (!p.reached && p.cue <= w) { p.reached = true; tryDraw(p); } });
+    runNarration(b, run, onWord, () => {
+      completeBeat(b);
+      later(() => { if (i + 1 < n) goto(i + 1, true); else showQuiz(); }, 700, run);
+    });
+    setStatus();
+  }
+
+  /* ---------- loading ---------- */
+  function showIssues(issues) {
+    const box = $('issues');
+    if (!issues.length) { box.hidden = true; box.replaceChildren(); return; }
+    box.hidden = false;
+    box.replaceChildren(h('b', '', `${issues.length} validation issue${issues.length === 1 ? '' : 's'}`));
+    const ul = h('ul');
+    issues.slice(0, 25).forEach((i) => ul.append(h('li', '', `${i.path}: ${i.message}`)));
+    box.append(ul);
+  }
+
+  function loadLesson(lesson) {
+    stopAll();
+    state.playing = false; state.cur = -1; state.quiz = false; state.lesson = null; state.beats = [];
+    // Repair loose arrow ends and label placement before showing (geometry is code's job). Bad input stays as-is.
+    state.autofixChanges = [];
+    try {
+      if (lesson && Array.isArray(lesson.beats)) {
+        const fixed = window.PencilValidator.autofixLesson(lesson);
+        lesson = fixed.lesson;
+        state.autofixChanges = fixed.changes;
+      }
+    } catch (e) { /* malformed lesson: fall through, the validator will report it */ }
+    const result = window.PencilValidator.validateLesson(lesson);
+    showIssues(result.issues);
+    if (!lesson || !Array.isArray(lesson.beats) || lesson.beats.length === 0) {
+      $('stage').replaceChildren(h('div', '', 'This lesson has no beats to show.'));
+      $('stage').firstChild.id = 'empty';
+      setStatus();
+      return false;
+    }
+    try {
+      state.lesson = lesson;
+      buildLesson(lesson);
+      $('title').textContent = (lesson.meta && lesson.meta.title) || 'Untitled lesson';
+      document.title = $('title').textContent;
+      setStatus();
+      return true;
+    } catch (e) {
+      state.lesson = null;
+      state.errors.push(String(e));
+      showIssues([{ path: '$', message: 'Could not render: ' + e.message }]);
+      setStatus();
+      return false;
+    }
+  }
+
+  function parseAndLoad(text) {
+    let obj;
+    try { obj = JSON.parse(text); }
+    catch (e) { showIssues([{ path: '$', message: 'Invalid JSON: ' + e.message }]); return false; }
+    return loadLesson(obj);
+  }
+
+  /* ---------- wiring ---------- */
+  $('play').addEventListener('click', () => {
+    if (!state.lesson) return;
+    if (state.playing) { stopAll(); state.playing = false; setStatus(); return; }
+    goto(state.cur < 0 || state.quiz ? 0 : state.cur, true);
+  });
+  $('wobble-toggle').addEventListener('change', (e) => $('stage').classList.toggle('wobble', e.target.checked));
+  $('prev').addEventListener('click', () => goto(Math.max(0, state.cur - 1), true));
+  $('next').addEventListener('click', () => { if (state.cur >= state.beats.length - 1) showQuiz(); else goto(state.cur + 1, true); });
+  $('sample-btn').addEventListener('click', () => parseAndLoad($('sample').textContent));
+  $('paste-btn').addEventListener('click', () => parseAndLoad($('paste').value));
+  $('file').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => parseAndLoad(String(r.result));
+    r.readAsText(f);
+  });
+
+  /* ---------- boot ---------- */
+  if (params.get('speed')) $('speed').value = params.get('speed');
+  if (params.get('mute') === '1') $('mute').checked = true;
+  if (params.get('wobble') === '1') { $('wobble-toggle').checked = true; $('stage').classList.add('wobble'); }
+  const src = params.get('src');
+  const boot = src
+    ? fetch(src).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    : Promise.resolve($('sample').textContent);
+  boot.then((t) => { if (parseAndLoad(t) && params.get('autoplay') === '1') goto(0, true); })
+      .catch((e) => showIssues([{ path: 'src', message: 'Could not load lesson: ' + e.message }]));
+})();
+</script>
+</body>
+</html>

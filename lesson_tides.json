@@ -1,0 +1,349 @@
+{
+  "version": 1,
+  "meta": {
+    "title": "How Tides Work",
+    "subject": "Earth Science",
+    "language": "en",
+    "mood": "friendly and clear"
+  },
+  "canvas": {
+    "logicalWidth": 1000,
+    "theme": "light"
+  },
+  "beats": [
+    {
+      "id": "b1",
+      "narration": "Twice a day, the sea creeps up the beach, then slides back again. Nobody pushes it. This rise and fall is the tide, and it happens because the Moon is pulling on our oceans from far away. Let's see how that works.",
+      "ops": [
+        {
+          "id": "o1",
+          "type": "heading",
+          "text": "How Tides Work",
+          "level": 1
+        },
+        {
+          "id": "o2",
+          "type": "paragraph",
+          "text": "The sea rises and falls twice a day, and the Moon is the main reason why."
+        },
+        {
+          "id": "o3",
+          "type": "callout",
+          "text": "Big idea: gravity from the Moon and Sun shapes the oceans.",
+          "tone": "key"
+        }
+      ]
+    },
+    {
+      "id": "b2",
+      "narration": "Imagine the Earth as a blue ball, with a big bulge of water pulled toward the Moon. On the side facing the Moon, water is pulled most strongly. On the far side, the Moon pulls the Earth away from the water, so it bulges too.",
+      "ops": [
+        {
+          "id": "o4",
+          "type": "heading",
+          "text": "Two Bulges of Water",
+          "level": 2
+        },
+        {
+          "id": "o5",
+          "type": "figure",
+          "frame": {
+            "width": 640,
+            "height": 340
+          },
+          "parts": [
+            {
+              "name": "earth",
+              "cue": 4,
+              "marks": [
+                {
+                  "kind": "circle",
+                  "cx": 320,
+                  "cy": 170,
+                  "r": 60,
+                  "color": "blue",
+                  "fill": "#cfe6ff"
+                },
+                {
+                  "kind": "label",
+                  "x": 320,
+                  "y": 175,
+                  "text": "Earth",
+                  "size": 16,
+                  "align": "middle"
+                }
+              ]
+            },
+            {
+              "name": "moon",
+              "cue": 6,
+              "marks": [
+                {
+                  "kind": "circle",
+                  "cx": 560,
+                  "cy": 170,
+                  "r": 26,
+                  "color": "gray",
+                  "fill": "#e8e8e8"
+                },
+                {
+                  "kind": "label",
+                  "x": 560,
+                  "y": 218,
+                  "text": "Moon",
+                  "size": 16,
+                  "align": "middle"
+                }
+              ]
+            },
+            {
+              "name": "bulges",
+              "cue": 10,
+              "marks": [
+                {
+                  "kind": "ellipse",
+                  "cx": 320,
+                  "cy": 170,
+                  "rx": 120,
+                  "ry": 62,
+                  "color": "blue"
+                },
+                {
+                  "kind": "label",
+                  "x": 470,
+                  "y": 130,
+                  "text": "near bulge",
+                  "size": 13,
+                  "align": "middle"
+                },
+                {
+                  "kind": "label",
+                  "x": 160,
+                  "y": 130,
+                  "text": "far bulge",
+                  "size": 13,
+                  "align": "middle"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "o6",
+          "type": "callout",
+          "text": "Two bulges: one facing the Moon, one on the opposite side.",
+          "tone": "info"
+        }
+      ]
+    },
+    {
+      "id": "b3",
+      "narration": "The Earth spins through these two bulges in about one day, so most coasts get two high tides and two low tides. And because the Moon also moves, high tide comes a little later each day, roughly fifty minutes later.",
+      "ops": [
+        {
+          "id": "o7",
+          "type": "definition",
+          "term": "Tidal cycle",
+          "definition": "The slow rise and fall of sea level caused by the Moon and Sun pulling on the oceans."
+        },
+        {
+          "id": "o8",
+          "type": "figure",
+          "frame": {
+            "width": 620,
+            "height": 300
+          },
+          "parts": [
+            {
+              "name": "beach",
+              "cue": 3,
+              "marks": [
+                {
+                  "kind": "line",
+                  "x1": 40,
+                  "y1": 250,
+                  "x2": 580,
+                  "y2": 250,
+                  "color": "orange",
+                  "width": 3
+                },
+                {
+                  "kind": "label",
+                  "x": 90,
+                  "y": 278,
+                  "text": "shore",
+                  "size": 14,
+                  "align": "start"
+                }
+              ]
+            },
+            {
+              "name": "high",
+              "cue": 6,
+              "marks": [
+                {
+                  "kind": "path",
+                  "d": "M60 230 Q150 120 250 230",
+                  "color": "blue"
+                },
+                {
+                  "kind": "label",
+                  "x": 160,
+                  "y": 110,
+                  "text": "high tide",
+                  "size": 14,
+                  "align": "middle"
+                }
+              ]
+            },
+            {
+              "name": "low",
+              "cue": 9,
+              "marks": [
+                {
+                  "kind": "path",
+                  "d": "M330 230 Q400 190 470 230",
+                  "color": "blue",
+                  "dashed": true
+                },
+                {
+                  "kind": "label",
+                  "x": 400,
+                  "y": 170,
+                  "text": "low tide",
+                  "size": 14,
+                  "align": "middle"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "o9",
+          "type": "paragraph",
+          "text": "One spin of the Earth passes through both bulges: two highs and two lows."
+        }
+      ]
+    },
+    {
+      "id": "b4",
+      "narration": "The Sun pulls too, but from much farther away, so its effect is weaker. When the Sun, Moon, and Earth line up, their pulls add together and we get bigger spring tides. When they sit at right angles, the pulls partly cancel, giving smaller neap tides.",
+      "ops": [
+        {
+          "id": "o10",
+          "type": "heading",
+          "text": "Springs and Neaps",
+          "level": 2
+        },
+        {
+          "id": "o11",
+          "type": "table",
+          "columns": [
+            "Tide",
+            "Sun and Moon",
+            "Size"
+          ],
+          "rows": [
+            [
+              "Spring tide",
+              "In a line",
+              "Bigger"
+            ],
+            [
+              "Neap tide",
+              "At right angles",
+              "Smaller"
+            ]
+          ]
+        },
+        {
+          "id": "o12",
+          "type": "callout",
+          "text": "Line up = spring tide. Right angles = neap tide.",
+          "tone": "tip"
+        }
+      ]
+    },
+    {
+      "id": "b5",
+      "narration": "Let's try an example. The Moon is directly above a beach, so it is high tide there. Six hours later, the Earth has turned a quarter of the way, and the sea has dropped to low tide. Another six hours, and high tide returns.",
+      "ops": [
+        {
+          "id": "o13",
+          "type": "heading",
+          "text": "Worked Example",
+          "level": 2
+        },
+        {
+          "id": "o14",
+          "type": "paragraph",
+          "text": "Time 0: Moon overhead, high tide. Time 6 hours: low tide. Time 12 hours: high tide again."
+        },
+        {
+          "id": "o15",
+          "type": "callout",
+          "text": "So one full high-low-high cycle takes about twelve hours.",
+          "tone": "key"
+        }
+      ]
+    },
+    {
+      "id": "b6",
+      "narration": "To sum up: the Moon's gravity makes two bulges of water, the spinning Earth turns coasts through them, and the Sun stretches them into spring and neap tides. That is why the sea rises and falls twice a day.",
+      "ops": [
+        {
+          "id": "o16",
+          "type": "heading",
+          "text": "Recap",
+          "level": 2
+        },
+        {
+          "id": "o17",
+          "type": "paragraph",
+          "text": "Two bulges + a spinning Earth = two high and two low tides every day."
+        },
+        {
+          "id": "o18",
+          "type": "callout",
+          "text": "Next time the water reaches your feet, you will know why.",
+          "tone": "info"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "question": "What is the main cause of tides on Earth?",
+      "options": [
+        "Wind blowing across the sea",
+        "The gravity of the Moon and Sun",
+        "Whales swimming in the ocean",
+        "Melting ice at the poles"
+      ],
+      "answer": 1,
+      "explanation": "Tides are caused mainly by the gravitational pull of the Moon, with a smaller effect from the Sun."
+    },
+    {
+      "question": "How many high tides do most coasts get in one day?",
+      "options": [
+        "One",
+        "Two",
+        "Three",
+        "None"
+      ],
+      "answer": 1,
+      "explanation": "The Earth spins through two bulges of water each day, giving two high tides and two low tides."
+    },
+    {
+      "question": "When the Sun, Moon, and Earth line up, what kind of tide do we get?",
+      "options": [
+        "A neap tide, which is smaller",
+        "A spring tide, which is bigger",
+        "No tide at all",
+        "Only low tides"
+      ],
+      "answer": 1,
+      "explanation": "When they line up, the pulls add together and produce bigger spring tides."
+    }
+  ]
+}
