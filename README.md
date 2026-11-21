@@ -4,6 +4,10 @@ A small open-source take on the "AI teacher that draws on a whiteboard" idea: a 
 lesson as strict JSON, code validates it, and a browser player draws it in time with the narration.
 Everything here (prompts, schema, player) is original code.
 
+**[Live demo](https://vbs2004.github.io/pencil/)**: a lesson written by DeepSeek, played by the single-file player (press Play, untick "Silent" for voice).
+
+![A lesson on how tides work being drawn step by step (sped up 3x)](docs/demo.gif)
+
 ```
 topic --> planner.py --(LLM)--> lesson.json --> validator.js --(issues)--> repair loop
                                                       |
