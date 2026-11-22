@@ -53,5 +53,5 @@ python3 build.py                   # regenerate player.html from player.template
 
 - Unit tests use a scripted fake model; live runs have been done with DeepSeek (`deepseek-flash`). The Anthropic path is untested live.
 - Narration uses the browser's built-in speech synthesis. Swap in an on-device TTS for a consistent voice.
-- The wobble effect is opt-in: the SVG displacement filter can leave small notches in thin strokes.
+- Hand-drawn wobble is on by default (`?wobble=0` or the Wobble checkbox turns it off). It nudges the geometry, not pixels, so strokes stay clean. It is seeded from each shape, so replays look identical.
 - No accounts, storage, uploads, video export or billing.

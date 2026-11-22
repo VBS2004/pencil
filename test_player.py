@@ -45,12 +45,21 @@ def main():
         assert page.locator(".beat.visible").count() == 4
         page.screenshot(path=str(ROOT / "shot_end.png"), full_page=True)
 
-        # 1b. Wobble is off by default and toggles on.
-        assert not page.evaluate("document.getElementById('stage').classList.contains('wobble')")
-        page.check("#wobble-toggle")
-        assert page.evaluate("getComputedStyle(document.querySelector('.figure svg')).filter").startswith("url(")
-        page.uncheck("#wobble-toggle")
+        # 1b. Wobble is on by default (geometry-based), keeps endpoints/shape, and toggles back to exact geometry.
+        assert page.is_checked("#wobble-toggle")
+        info = page.evaluate("""() => [...document.querySelectorAll('.figure path')].filter(e => e._dp).map(e => [e._dp, e.getAttribute('d')])""")
+        assert info
+        changed = [1 for dp, d in info if dp != d]
+        assert len(changed) >= len(info) // 2, (len(changed), len(info))
         assert page.evaluate("getComputedStyle(document.querySelector('.figure svg')).filter") == "none"
+        page.uncheck("#wobble-toggle")
+        assert page.evaluate("[...document.querySelectorAll('.figure path')].filter(e => e._dp).every(e => e.getAttribute('d') === e._dp)")
+        page.check("#wobble-toggle")
+        assert page.evaluate("[...document.querySelectorAll('.figure path')].filter(e => e._dp && e._dw).every(e => e.getAttribute('d') === e._dw)")
+        # Same lesson, same wobble: reloading gives identical geometry.
+        page.reload(); page.wait_for_selector(".figure path")
+        again = page.evaluate("[...document.querySelectorAll('.figure path')].filter(e => e._dp).map(e => e.getAttribute('d'))")
+        assert again == [d for _, d in info], "wobble must be deterministic"
 
         # 2. Quiz buttons respond.
         page.locator(".q").first.locator("button").nth(1).click()
